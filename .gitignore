@@ -1,0 +1,7 @@
+__pycache__
+.idea
+*.xlsx
+*.md
+build
+dist
+models
