@@ -16,8 +16,8 @@ class CutImage (threading.Thread):
         if capture is not None:
             while True:
                 # 获取一帧
-                # frame = cv2.cvtColor(cv2.imread('ivan.jpg'), cv2.COLOR_BGR2RGB)
-                frame = grab_frame(capture)
+                frame = cv2.cvtColor(cv2.imread('elon.jpg'), cv2.COLOR_BGR2RGB)
+                # frame = grab_frame(capture) # <class 'numpy.ndarray'>
                 # 获取图像大小
                 max_height, max_width = frame.shape[0], frame.shape[1]
                 # 创建检测器
