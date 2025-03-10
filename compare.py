@@ -25,8 +25,12 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
+
+import time
+
 import tensorflow as tf
 import numpy as np
+from database_operation import load_all_face_vector_from_people
 import facenet
 import align.detect_face
 from PIL import Image
@@ -78,44 +82,6 @@ from PIL import Image
 #                     print('  %1.4f  ' % dist, end='')
 #                 print('')
 
-def main(model, images):
-    images = load_and_align_data(images)
-    with tf.Graph().as_default():
-
-        with tf.compat.v1.Session() as sess:
-
-            # Load the model
-            facenet.load_model(model)
-
-            # Get input and output tensors
-            images_placeholder = tf.compat.v1.get_default_graph().get_tensor_by_name("input:0")
-            embeddings = tf.compat.v1.get_default_graph().get_tensor_by_name("embeddings:0")
-            phase_train_placeholder = tf.compat.v1.get_default_graph().get_tensor_by_name("phase_train:0")
-
-            # Run forward pass to calculate embeddings
-            feed_dict = {images_placeholder: images, phase_train_placeholder: False}
-            emb = sess.run(embeddings, feed_dict=feed_dict)
-
-            nrof_images = len(images)
-
-            # print('Images:')
-            # for i in range(nrof_images):
-            #     print('%1d: %s' % (i, image_files[i]))
-            # print('')
-
-            # Print distance matrix
-            print('Distance matrix')
-            print('    ', end='')
-            for i in range(nrof_images):
-                print('    %1d     ' % i, end='')
-            print('')
-            for i in range(nrof_images):
-                print('%1d  ' % i, end='')
-                for j in range(nrof_images):
-                    dist = np.sqrt(np.sum(np.square(np.subtract(emb[i, :], emb[j, :]))))
-                    print('  %1.4f  ' % dist, end='')
-                print('')
-
 # def load_and_align_data(image_paths, image_size, margin, gpu_memory_fraction):
 #
 #     minsize = 20 # minimum size of face
@@ -153,40 +119,6 @@ def main(model, images):
 #         img_list.append(prewhitened)
 #     images = np.stack(img_list)
 #     return images
-
-def load_and_align_data(images, image_size=160, margin=44, gpu_memory_fraction=1.0):
-
-    minsize = 20 # minimum size of face
-    threshold = [ 0.6, 0.7, 0.7 ]  # three steps's threshold
-    factor = 0.709 # scale factor
-
-    print('Creating networks and loading parameters')
-    with tf.Graph().as_default():
-        gpu_options = tf.compat.v1.GPUOptions(per_process_gpu_memory_fraction=gpu_memory_fraction)
-        sess = tf.compat.v1.Session(config=tf.compat.v1.ConfigProto(gpu_options=gpu_options, log_device_placement=False))
-        with sess.as_default():
-            pnet, rnet, onet = align.detect_face.create_mtcnn(sess, None)
-
-    img_list = []
-    for image in images:
-        img_size = np.asarray(image.shape)[0:2]
-        bounding_boxes, _ = align.detect_face.detect_face(image, minsize, pnet, rnet, onet, threshold, factor)
-        if len(bounding_boxes) < 1:
-          images.remove(image)
-          print("can't detect face, remove ", image)
-          continue
-        det = np.squeeze(bounding_boxes[0,0:4])
-        bb = np.zeros(4, dtype=np.int32)
-        bb[0] = np.maximum(det[0]-margin/2, 0)
-        bb[1] = np.maximum(det[1]-margin/2, 0)
-        bb[2] = np.minimum(det[2]+margin/2, img_size[1])
-        bb[3] = np.minimum(det[3]+margin/2, img_size[0])
-        cropped = image[bb[1]:bb[3],bb[0]:bb[2],:]
-        aligned = np.array(Image.fromarray(cropped).resize((image_size, image_size)))
-        prewhitened = facenet.prewhiten(aligned)
-        img_list.append(prewhitened)
-    images = np.stack(img_list)
-    return images
 
 # def parse_arguments(argv):
 #     parser = argparse.ArgumentParser()
