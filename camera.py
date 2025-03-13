@@ -52,6 +52,8 @@ class Recognition(QObject, threading.Thread):
             self.flag.wait()
             if queue_recognition_image.empty():
                 queue_recognition_image.put(grab_frame(capture))
+                # queue_recognition_image.put(cv2.cvtColor(cv2.imread("D:\PythonWorkspace\Facial_Recognition\lfw_funneled\Aaron_Tippin\Aaron_Tippin_0001.jpg"),
+                #                                          cv2.COLOR_BGR2RGB))
             if not queue_recognition_result.empty():
                 try:
                     vector = queue_recognition_result.get(timeout=5)
@@ -64,7 +66,7 @@ class Recognition(QObject, threading.Thread):
                     self.result.append(dist)
                 if self.result:
                     self.result_updated.emit(self.result)
-            time.sleep(2)
+            time.sleep(1)
 
     def pause(self):
         self.flag.clear()
@@ -203,7 +205,7 @@ class Compare(threading.Thread):
                         feed_dict = {images_placeholder: images, phase_train_placeholder: False}
                         emb = sess.run(embeddings, feed_dict=feed_dict)  # 计算向量
                         queue_manager_result.put(emb[0])
-                    time.sleep(2)
+                    time.sleep(1)
 
 
     def pause(self):
@@ -235,7 +237,7 @@ def manager_login():
         return False
 
 def register(job_id, name, department_id=0, is_manager=0):
-    if job_id is not None and name is not None and department_id is not None:
+    if job_id and name and department_id:
         queue_register_image.put(grab_frame(capture))
         try:
             vector = queue_register_result.get(timeout=5)
@@ -245,4 +247,3 @@ def register(job_id, name, department_id=0, is_manager=0):
             return False
     else:
         return False
-

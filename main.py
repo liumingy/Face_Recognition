@@ -1,4 +1,5 @@
 import sys
+import time
 from PyQt5.QtCore import QTimer
 from PyQt5.QtWidgets import QMainWindow, QApplication, QVBoxLayout
 from camera import Camera, Recognition, Compare, manager_login
@@ -6,12 +7,17 @@ from interface.main_interface import Ui_MainWindow
 from database_operation import load_name_by_job_id_from_people, save_ins_to_history
 from manage import Manage
 from manager_login import ManagerLogin
+from collections import Counter
 
+def has_element_three_or_more(lst):
+    counts = Counter(lst)
+    return any(count >= 3 for count in counts.values())
 
 class Main(QMainWindow, Ui_MainWindow):
     def __init__(self):
         super().__init__()
         self.setupUi(self)  # 设置窗体
+        self.cache = []
 
         # 创建摄像头流对象
         self.camera = Camera()
@@ -57,7 +63,7 @@ class Main(QMainWindow, Ui_MainWindow):
             elif type == -2:
                 info += "签退失败"
         else:
-            info = "未知"
+            info = "未知人脸"
         self.label.setText(info)
 
     def goto_manage(self):

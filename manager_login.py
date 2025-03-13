@@ -37,7 +37,7 @@ class ManagerLogin(QMainWindow, Ui_MainWindow):
             else:
                 self.label.setText("验证失败")
         else:
-            self.label.setText("人脸检测中")
+            self.label.setText("人脸验证中")
 
     def closeEvent(self, event):
         self.parent.goto_main()

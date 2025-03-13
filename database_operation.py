@@ -18,10 +18,14 @@ def close_sqlite(conn, cursor):
 def save_ins_to_people(job_id, name, department_id, face_vector, is_manager):
     vector_bytes = face_vector.tobytes()  # 转换为字节流
     conn, cursor = connect_db()
-    cursor.execute("INSERT INTO people (job_id, name, department_id, face_vector, is_manager) VALUES (?, ?, ?, ?, ?)",
-                   (job_id, name, department_id, vector_bytes, is_manager))
-    conn.commit()
-    close_sqlite(conn, cursor)
+    try:
+        cursor.execute("INSERT INTO people (job_id, name, department_id, face_vector, is_manager) VALUES (?, ?, ?, ?, ?)",
+                       (job_id, name, department_id, vector_bytes, is_manager))
+        conn.commit()
+    except Exception as e:
+        print("创建员工时出错：", e)
+    finally:
+        close_sqlite(conn, cursor)
 
 def load_name_by_job_id_from_people(job_id):
     conn, cursor = connect_db()
@@ -46,12 +50,15 @@ def load_all_face_vector_from_people():
         vectors.append((vector_id, vector))
     return vectors
 
-def save_ins_to_department(id, name):
+def save_ins_to_department(name):
     conn, cursor = connect_db()
-    cursor.execute("INSERT INTO department (id, name) VALUES (?, ?)",
-                   (id, name))
-    conn.commit()
-    close_sqlite(conn, cursor)
+    try:
+        cursor.execute("INSERT INTO department (name) VALUES (?)", (name,))
+        conn.commit()
+    except Exception as e:
+        print("创建部门时出错：", e)
+    finally:
+        close_sqlite(conn, cursor)
 
 def load_all_ins_from_department():
     conn, cursor = connect_db()
@@ -282,7 +289,7 @@ def load_people():
     读取所有员工信息，返回格式为：
     [{"job_id": ..., "name": ..., "department": ..., "is_manager": ...}, ...]
     """
-    # 连接数据库（请替换为实际的数据库文件路径）
+    # 连接数据库
     conn, cursor = connect_db()
     # 设置 row_factory 为 sqlite3.Row，方便按列名获取数据
     conn.row_factory = sqlite3.Row
@@ -315,7 +322,55 @@ def load_people():
     close_sqlite(conn, cursor)
     return result
 
+def delete_people_by_job_id(job_id):
+    """
+    根据给定的 job_id 删除 people 表中的行数据
+    :param job_id: 要删除的工号
+    """
+    # 连接数据库
+    conn, cursor = connect_db()
+    try:
+        # 执行删除操作
+        cursor.execute("DELETE FROM people WHERE job_id = ?", (job_id,))
+        conn.commit()
+        # 检查是否删除成功
+        if cursor.rowcount > 0:
+            print(f"工号 {job_id} 对应的记录已成功删除。")
+        else:
+            print(f"未找到工号 {job_id} 对应的记录。")
+    except Exception as e:
+        print("删除过程中出错：", e)
+    finally:
+        close_sqlite(conn, cursor)
+
+def update_people(job_id, new_job_id, new_name, new_department_id, new_is_manager):
+    """
+    更新 people 表中原始 job_id 对应的记录，将 job_id 及其他字段更新为新的值
+    :param job_id: 原始的工号，用于定位记录
+    :param new_job_id: 新的工号
+    :param new_name: 新的姓名
+    :param new_department_id: 新的部门编号
+    :param new_is_manager: 新的是否为管理员（1 表示是，0 表示否）
+    """
+    conn, cursor = connect_db()
+    # 执行 UPDATE 语句
+    try:
+        cursor.execute("""
+                UPDATE people
+                SET job_id = ?, name = ?, department_id = ?, is_manager = ?
+                WHERE job_id = ?
+            """, (new_job_id, new_name, new_department_id, new_is_manager, job_id))
+        conn.commit()
+        if cursor.rowcount > 0:
+            print("记录更新成功")
+        else:
+            print(f"未找到 job_id 为 {job_id} 的记录。")
+    except Exception as e:
+        print("更新过程中出错：", e)
+    finally:
+        close_sqlite(conn, cursor)
+
+
 if __name__ == "__main__":
-    people_list = load_people()
-    for record in people_list:
-        print(record)
+    vec = load_all_face_vector_from_people()[0][1]
+    save_ins_to_people(202112135, "刘明宇", 1, face_vector=vec, is_manager=0)
