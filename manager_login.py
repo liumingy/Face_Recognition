@@ -2,7 +2,7 @@ import time
 
 from PyQt5.QtCore import QTimer
 from PyQt5.QtWidgets import QMainWindow, QVBoxLayout
-from camera import manager_login, Camera
+from camera import Camera, Manager
 from interface.manage_login_interface import Ui_MainWindow
 
 class ManagerLogin(QMainWindow, Ui_MainWindow):
@@ -23,18 +23,26 @@ class ManagerLogin(QMainWindow, Ui_MainWindow):
         layout.addWidget(self.camera.canvas)
         self.widget.setLayout(layout)
 
-        # 设置定时器来进行人脸检测
-        self.login_timer = QTimer(self)
-        self.login_timer.timeout.connect(self.login)
-        self.login_timer.start(3000)  # 每2000毫秒执行一次
+        # 为label绑定槽函数
+        self.parent.parent.manager.result_signal.connect(self.sign)
+        self.parent.parent.compare.recognition_fake_face_signal.connect(self.fake_face)
 
-    def login(self):
+    def fake_face(self, is_fake_face):
+        if is_fake_face:
+            self.label.setStyleSheet(f"color: red;")
+            self.label.setText("虚假人脸")
+
+    def sign(self, result):
         if self.flag:
-            if manager_login():
+            min_value_row = min(enumerate(result), key=lambda x: x[1][1])  # 第二列索引是1
+            print(f"管理员登录：{min_value_row}")
+            if min_value_row[1][1] <= 1:
                 self.flag = False
+                self.parent.parent.manager.pause()
                 self.hide()
                 self.parent.show()
             else:
+                self.label.setStyleSheet(f"color: red;")
                 self.label.setText("验证失败")
         else:
             self.label.setText("人脸验证中")

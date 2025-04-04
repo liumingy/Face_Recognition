@@ -2,7 +2,7 @@ import sqlite3
 import numpy as np
 import datetime
 
-def connect_db(db_file="database.db"):
+def connect_db(db_file="face_recognition.db"):
     """连接到SQLite数据库并返回连接和游标"""
     conn = sqlite3.connect(db_file, check_same_thread=False)
     cursor = conn.cursor()
@@ -13,7 +13,6 @@ def close_sqlite(conn, cursor):
         conn.commit()
         cursor.close()
         conn.close()
-
 
 def save_ins_to_people(job_id, name, department_id, face_vector, is_manager):
     vector_bytes = face_vector.tobytes()  # 转换为字节流
@@ -133,7 +132,7 @@ def save_ins_to_history(job_id):
                 return result
             # 计算当前时间与 sign_in 之间的时间差（分钟）
             time_diff = (current_dt - sign_in_dt).total_seconds() / 60.0
-            if time_diff > 10:
+            if time_diff > 30:
                 # 情况2：时间差超过 10 分钟，则更新 sign_out 为当前时间
                 cursor.execute(
                     "UPDATE history SET sign_out=? WHERE date=? AND job_id=?",
@@ -141,9 +140,11 @@ def save_ins_to_history(job_id):
                 )
                 conn.commit()
                 result = 2
-            else:
-                # 情况：时间差不超过 10 分钟，不做任何操作
+            elif 10 < time_diff < 30:
+                # 情况：时间差不超过 30 分钟，但超过十分钟
                 result = 0
+            else:
+                result = 1
         else:
             # 情况3：已有记录且 sign_out 不为空，什么都不做
             result = -1
@@ -324,20 +325,30 @@ def load_people():
 
 def delete_people_by_job_id(job_id):
     """
-    根据给定的 job_id 删除 people 表中的行数据
+    根据给定的 job_id 删除 people 表中的行数据以及history表中对应的记录
     :param job_id: 要删除的工号
     """
     # 连接数据库
     conn, cursor = connect_db()
     try:
-        # 执行删除操作
+        # 删除 history 表中对应的记录
+        cursor.execute("DELETE FROM history WHERE job_id = ?", (job_id,))
+        history_rows_deleted = cursor.rowcount
+        
+        # 删除 people 表中的记录
         cursor.execute("DELETE FROM people WHERE job_id = ?", (job_id,))
+        people_rows_deleted = cursor.rowcount
+        
         conn.commit()
+        
         # 检查是否删除成功
-        if cursor.rowcount > 0:
-            print(f"工号 {job_id} 对应的记录已成功删除。")
+        if people_rows_deleted > 0:
+            print(f"工号 {job_id} 对应的员工记录已成功删除。")
         else:
-            print(f"未找到工号 {job_id} 对应的记录。")
+            print(f"未找到工号 {job_id} 对应的员工记录。")
+            
+        if history_rows_deleted > 0:
+            print(f"工号 {job_id} 对应的 {history_rows_deleted} 条考勤记录已成功删除。")
     except Exception as e:
         print("删除过程中出错：", e)
     finally:

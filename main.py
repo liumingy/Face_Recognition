@@ -2,7 +2,7 @@ import sys
 import time
 from PyQt5.QtCore import QTimer
 from PyQt5.QtWidgets import QMainWindow, QApplication, QVBoxLayout
-from camera import Camera, Recognition, Compare, manager_login
+from camera import Camera, Recognition, Compare, Manager
 from interface.main_interface import Ui_MainWindow
 from database_operation import load_name_by_job_id_from_people, save_ins_to_history
 from manage import Manage
@@ -32,50 +32,67 @@ class Main(QMainWindow, Ui_MainWindow):
 
         # 创建人脸识别对象
         self.recognition = Recognition()
-        # 运行线程
         self.recognition.start()
+        # 创建管理员登录人脸识别对象
+        self.manager = Manager()
+        self.manager.pause()
+        self.manager.start()
 
         # 创建比较神经网络
         self.compare = Compare()
-        # 运行线程
         self.compare.start()
 
-        # 将文本绑定到textBrowser中
-        self.recognition.result_updated.connect(self.sign)
+        # 为label绑定槽函数
+        self.recognition.result_signal.connect(self.sign)
+        self.compare.recognition_fake_face_signal.connect(self.fake_face)
 
         # 为跳转按钮绑定槽函数
         self.commandLinkButton.clicked.connect(self.goto_manage)
 
+    def fake_face(self, is_fake_face):
+        if is_fake_face:
+            self.label.setStyleSheet(f"color: red;")
+            self.label.setText("虚假人脸")
+
     def sign(self, result):
         min_value_row = min(enumerate(result), key=lambda x: x[1][1])  # 第二列索引是1
-        print(min_value_row)
-        if min_value_row[1][1] <= 0.8:
+        print(f"人脸打卡：{min_value_row}")
+        if min_value_row[1][1] <= 1:
             info = load_name_by_job_id_from_people(min_value_row[1][0])
             type = save_ins_to_history(min_value_row[1][0])
             if type == 0:
+                self.label.setStyleSheet(f"color: blue;")
                 info += "已签到"
             elif type == 1:
+                self.label.setStyleSheet(f"color: green;")
                 info += "签到成功"
             elif type == 2:
+                self.label.setStyleSheet(f"color: green;")
                 info += "签退成功"
             elif type == -1:
-                info += "已签退，签到失败"
+                self.label.setStyleSheet(f"color: blue;")
+                info += "已签退"
             elif type == -2:
+                self.label.setStyleSheet(f"color: red;")
                 info += "签退失败"
         else:
+            self.label.setStyleSheet(f"color: red;")
             info = "未知人脸"
         self.label.setText(info)
 
     def goto_manage(self):
         self.hide()  # 子窗口打开后隐藏主窗口
         self.recognition.pause()  # 暂停recognition线程
+        self.manager.resume()
         manager_login.flag = True
         manager_login.show()
 
     def closeEvent(self, event):
         # 在关闭窗口时执行的关闭函数
+        self.manager.stop()
         self.recognition.stop()
         self.compare.stop()
+
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)

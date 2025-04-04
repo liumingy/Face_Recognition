@@ -1,8 +1,8 @@
 import sys
-from PyQt5.QtCore import QDate, QTimer
-from PyQt5.QtGui import QIcon
+from PyQt5.QtCore import QDate, QTimer, Qt
+from PyQt5.QtGui import QIcon, QMovie
 from PyQt5.QtWidgets import QMainWindow, QApplication, QTableWidgetItem, QVBoxLayout, QDialog, QAction, QLineEdit, \
-    QMessageBox, QMenu, QInputDialog, QHeaderView
+    QMessageBox, QMenu, QInputDialog, QHeaderView, QProgressDialog, QProgressBar, QLabel
 from sympy.series.gruntz import compare
 
 from camera import Camera, register, Compare
@@ -14,7 +14,7 @@ from interface.manage_interface import Ui_MainWindow
 from database_operation import load_attendance, load_all_name_from_department, load_id_by_name_from_department, \
     load_sign_history, load_people, delete_people_by_job_id
 from add_department import AddDepartment
-from PyQt5.QtCore import Qt, QPoint
+from PyQt5.QtCore import QPoint
 
 def get_row_content(tableWidget, row):
     """
@@ -52,9 +52,6 @@ class Manage(QMainWindow, Ui_MainWindow):
         self.sign_history = load_sign_history()
         self.people_info = load_people()
         self.attendance_data = load_attendance(self.calendarWidget.selectedDate().toString("yyyy-MM-dd"))
-
-        # self.compare = Compare()
-        # self.compare.start()
 
         # 定义提示框
         self.msg_box = QMessageBox(self)
@@ -117,6 +114,9 @@ class Manage(QMainWindow, Ui_MainWindow):
         self.tableWidget_3.customContextMenuRequested.connect(self.open_menu)
         self.tableWidget_3.cellDoubleClicked.connect(self.on_update_people)
 
+        # 初始化页面
+        self.stackedWidget.setCurrentIndex(0)
+
     def on_update_people(self, row, column):
         row_data = get_row_content(self.tableWidget_3, row)
         if column == 0:
@@ -134,7 +134,7 @@ class Manage(QMainWindow, Ui_MainWindow):
         self.show_people()
         self.show_attendance()
         self.show_history()
-        self.stackedWidget.setCurrentIndex(1)
+        self.stackedWidget.setCurrentIndex(2)
         self.stackedWidget.setCurrentIndex(3)
 
 
@@ -171,6 +171,8 @@ class Manage(QMainWindow, Ui_MainWindow):
                 self.tableWidget.setItem(row, col, item)
         self.tableWidget.resizeRowsToContents()
         self.tableWidget.resizeColumnsToContents()
+        self.stackedWidget.setCurrentIndex(2)
+        self.stackedWidget.setCurrentIndex(0)
 
     def on_search_history(self):
         temp = search(self.sign_history, self.lineEdit_4.text())
@@ -183,6 +185,8 @@ class Manage(QMainWindow, Ui_MainWindow):
                 self.tableWidget_2.setItem(row, col, item)
         self.tableWidget_2.resizeRowsToContents()
         self.tableWidget_2.resizeColumnsToContents()
+        self.stackedWidget.setCurrentIndex(3)
+        self.stackedWidget.setCurrentIndex(2)
 
     def on_search_people(self):
         temp = search(self.people_info, self.lineEdit_5.text())
@@ -195,6 +199,8 @@ class Manage(QMainWindow, Ui_MainWindow):
                 self.tableWidget_3.setItem(row, col, item)
         self.tableWidget_3.resizeRowsToContents()
         self.tableWidget_3.resizeColumnsToContents()
+        self.stackedWidget.setCurrentIndex(2)
+        self.stackedWidget.setCurrentIndex(3)
 
     def on_add_department(self):
         add_department = AddDepartment()
@@ -214,6 +220,8 @@ class Manage(QMainWindow, Ui_MainWindow):
                 self.tableWidget.setItem(row, col, item)
         self.tableWidget.resizeRowsToContents()
         self.tableWidget.resizeColumnsToContents()
+        self.stackedWidget.setCurrentIndex(2)
+        self.stackedWidget.setCurrentIndex(0)
 
     def show_history(self):
         self.sign_history = load_sign_history()
@@ -226,6 +234,8 @@ class Manage(QMainWindow, Ui_MainWindow):
                 self.tableWidget_2.setItem(row, col, item)
         self.tableWidget_2.resizeRowsToContents()
         self.tableWidget_2.resizeColumnsToContents()
+        self.stackedWidget.setCurrentIndex(3)
+        self.stackedWidget.setCurrentIndex(2)
 
     def show_people(self):
         self.people_info = load_people()
@@ -238,6 +248,8 @@ class Manage(QMainWindow, Ui_MainWindow):
                 self.tableWidget_3.setItem(row, col, item)
         self.tableWidget_3.resizeRowsToContents()
         self.tableWidget_3.resizeColumnsToContents()
+        self.stackedWidget.setCurrentIndex(2)
+        self.stackedWidget.setCurrentIndex(3)
 
     def register_ok(self):
         if self.comboBox.currentText() == "管理员":
@@ -246,9 +258,59 @@ class Manage(QMainWindow, Ui_MainWindow):
             is_manager = 0
         job_id = self.lineEdit.text()
         name = self.lineEdit_2.text()
-        if self.comboBox_2.lineEdit().text() in self.departments:
+        if self.comboBox_2.lineEdit().text() in self.departments and job_id and name:
             department_id = load_id_by_name_from_department(self.comboBox_2.currentText())
-            if register(job_id, name, department_id, is_manager):
+            
+            # 创建自定义对话框
+            progress_dialog = QDialog(self)
+            progress_dialog.setWindowTitle("请稍候")
+            progress_dialog.setFixedSize(400, 100)
+            progress_dialog.setWindowFlags(Qt.Dialog | Qt.CustomizeWindowHint | Qt.WindowTitleHint)
+            progress_dialog.setModal(True)
+            
+            # 创建布局
+            layout = QVBoxLayout(progress_dialog)
+            
+            # 添加文本标签
+            text_label = QLabel("正在注册人脸...", progress_dialog)
+            text_label.setAlignment(Qt.AlignCenter)
+            layout.addWidget(text_label)
+            
+            # 添加动画进度条
+            loading_label = QLabel(progress_dialog)
+            loading_label.setAlignment(Qt.AlignCenter)
+            
+            # 使用内置的动画或创建一个简单的动画
+            # 方法一：使用简单的QProgressBar动画
+            progress_bar = QProgressBar(progress_dialog)
+            progress_bar.setRange(0, 0)  # 设置为循环模式
+            progress_bar.setTextVisible(False)  # 不显示文字
+            progress_bar.setMinimumHeight(20)
+            progress_bar.setStyleSheet("""
+                QProgressBar {
+                    border: 1px solid grey;
+                    border-radius: 5px;
+                    background-color: #F0F0F0;
+                }
+                QProgressBar::chunk {
+                    background-color: #4CAF50;
+                    width: 10px;  /* 使动画块更窄，更有动感 */
+                    margin: 0.5px;
+                }
+            """)
+            layout.addWidget(progress_bar)
+            
+            # 显示对话框
+            progress_dialog.show()
+            QApplication.processEvents()
+            
+            # 执行注册操作
+            result = register(job_id, name, department_id, is_manager)
+            
+            # 关闭对话框
+            progress_dialog.close()
+            
+            if result:
                 self.msg_box.setText("注册成功")
                 self.msg_box.exec_()
                 self.show_attendance()
