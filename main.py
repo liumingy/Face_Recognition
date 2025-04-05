@@ -60,21 +60,21 @@ class Main(QMainWindow, Ui_MainWindow):
         if min_value_row[1][1] <= 1:
             info = load_name_by_job_id_from_people(min_value_row[1][0])
             type = save_ins_to_history(min_value_row[1][0])
-            if type == 0:
+            if type == 1:
                 self.label.setStyleSheet(f"color: blue;")
-                info += "已签到"
-            elif type == 1:
-                self.label.setStyleSheet(f"color: green;")
                 info += "签到成功"
             elif type == 2:
                 self.label.setStyleSheet(f"color: green;")
+                info += "已签到"
+            elif type == 3:
+                self.label.setStyleSheet(f"color: green;")
                 info += "签退成功"
-            elif type == -1:
+            elif type == 4:
                 self.label.setStyleSheet(f"color: blue;")
                 info += "已签退"
-            elif type == -2:
+            elif type == -1:
                 self.label.setStyleSheet(f"color: red;")
-                info += "签退失败"
+                info += "签到/签退失败"
         else:
             self.label.setStyleSheet(f"color: red;")
             info = "未知人脸"
@@ -83,8 +83,10 @@ class Main(QMainWindow, Ui_MainWindow):
     def goto_manage(self):
         self.hide()  # 子窗口打开后隐藏主窗口
         self.recognition.pause()  # 暂停recognition线程
+        self.camera_timer.stop()
         self.manager.resume()
         manager_login.flag = True
+        manager_login.camera_timer.start(50)
         manager_login.show()
 
     def closeEvent(self, event):

@@ -245,7 +245,7 @@ class Manager(QObject, threading.Thread):
             self.flag.wait()
             if queue_manager_image.empty():
                 queue_manager_image.put(grab_frame(capture))
-            if not queue_manager_image.empty():
+            if not queue_manager_result.empty():
                 try:
                     vector = queue_manager_result.get(timeout=5)
                 except Exception:

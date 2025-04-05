@@ -1,20 +1,23 @@
 import sys
 from PyQt5.QtCore import QDate, QTimer, Qt
-from PyQt5.QtGui import QIcon, QMovie
-from PyQt5.QtWidgets import QMainWindow, QApplication, QTableWidgetItem, QVBoxLayout, QDialog, QAction, QLineEdit, \
-    QMessageBox, QMenu, QInputDialog, QHeaderView, QProgressDialog, QProgressBar, QLabel
-from sympy.series.gruntz import compare
-
-from camera import Camera, register, Compare
+from PyQt5.QtGui import QIcon
+from PyQt5.QtWidgets import QMainWindow, QWidget, QApplication, QTableWidgetItem, QVBoxLayout, QDialog, QAction, QLineEdit, \
+    QMessageBox, QMenu, QProgressBar, QLabel, QProgressDialog
+from add_history import AddHistory
+from camera import Camera, register
 from change_department import ChangeDepartment
 from change_is_manager import ChangeIsManager
 from change_job_id import ChangeJobId
 from change_name import ChangeName
+from delete_department import DeleteDepartment
 from interface.manage_interface import Ui_MainWindow
 from database_operation import load_attendance, load_all_name_from_department, load_id_by_name_from_department, \
     load_sign_history, load_people, delete_people_by_job_id
 from add_department import AddDepartment
 from PyQt5.QtCore import QPoint
+from rename_department import RenameDepartment
+from test import Example
+
 
 def get_row_content(tableWidget, row):
     """
@@ -61,12 +64,11 @@ class Manage(QMainWindow, Ui_MainWindow):
         self.msg_box.setStandardButtons(QMessageBox.Ok)
         self.msg_box.button(QMessageBox.Ok).setText("确认")
 
-
         # 为工具栏按钮绑定槽函数
-        self.actionCount.triggered.connect(lambda: self.stackedWidget.setCurrentIndex(0))
+        self.actionCount.triggered.connect(self.show_attendance)
         self.actionRegister.triggered.connect(lambda: self.stackedWidget.setCurrentIndex(1))
-        self.actionHistory.triggered.connect(lambda: self.stackedWidget.setCurrentIndex(2))
-        self.actionPeople.triggered.connect(lambda: self.stackedWidget.setCurrentIndex(3))
+        self.actionHistory.triggered.connect(self.show_history)
+        self.actionPeople.triggered.connect(self.show_people)
 
         # 为跳转按钮绑定槽函数
         self.commandLinkButton.clicked.connect(self.goto_main)
@@ -88,7 +90,6 @@ class Manage(QMainWindow, Ui_MainWindow):
         # 设置定时器来实时更新图像
         self.camera_timer = QTimer(self)
         self.camera_timer.timeout.connect(self.camera.update_image)
-        self.camera_timer.start(50)  # 每50毫秒更新一次
         # 将二维画面添加到groupBox里
         layout = QVBoxLayout()
         layout.addWidget(self.camera.canvas)
@@ -96,7 +97,6 @@ class Manage(QMainWindow, Ui_MainWindow):
         # 为人脸注册comboBox初始化
         self.comboBox.addItems(["员工", "管理员"])
         self.comboBox_2.addItems(self.departments)
-
         # 为人脸注册的确认按钮绑定槽函数
         self.pushButton.clicked.connect(self.register_ok)
 
@@ -104,6 +104,7 @@ class Manage(QMainWindow, Ui_MainWindow):
         self.show_history() # 初始化打卡记录表
         self.lineEdit_4.addAction(action, QLineEdit.LeadingPosition)  # 左侧图标
         self.lineEdit_4.returnPressed.connect(self.on_search_history)
+        self.pushButton_6.clicked.connect(self.on_add_history)
 
         # 第四页界面的初始化
         self.show_people() # 初始化员工信息表
@@ -113,9 +114,36 @@ class Manage(QMainWindow, Ui_MainWindow):
         self.tableWidget_3.setContextMenuPolicy(Qt.CustomContextMenu)
         self.tableWidget_3.customContextMenuRequested.connect(self.open_menu)
         self.tableWidget_3.cellDoubleClicked.connect(self.on_update_people)
+        self.pushButton_4.clicked.connect(self.on_rename_department)
+        self.pushButton_5.clicked.connect(self.on_delete_department)
 
         # 初始化页面
         self.stackedWidget.setCurrentIndex(0)
+
+    def on_add_history(self):
+        add_history = AddHistory()
+        add_history.exec_()
+        self.show_history()
+
+    def on_delete_department(self):
+        delete_department = DeleteDepartment()
+        delete_department.exec_()
+        self.departments = load_all_name_from_department()
+        self.comboBox_2.clear()
+        self.comboBox_2.addItems(self.departments)
+        self.show_attendance()
+        self.show_history()
+        self.show_people()
+
+    def on_rename_department(self):
+        rename_department = RenameDepartment()
+        rename_department.exec_()
+        self.departments = load_all_name_from_department()
+        self.comboBox_2.clear()
+        self.comboBox_2.addItems(self.departments)
+        self.show_attendance()
+        self.show_history()
+        self.show_people()
 
     def on_update_people(self, row, column):
         row_data = get_row_content(self.tableWidget_3, row)
@@ -330,6 +358,8 @@ class Manage(QMainWindow, Ui_MainWindow):
 
     def goto_main(self):
         self.hide()
+        self.camera_timer.stop()
+        self.parent.camera_timer.start(50)
         self.parent.recognition.resume()
         self.parent.show()
 

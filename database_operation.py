@@ -52,23 +52,19 @@ def load_all_face_vector_from_people():
 def save_ins_to_department(name):
     conn, cursor = connect_db()
     try:
-        cursor.execute("INSERT INTO department (name) VALUES (?)", (name,))
-        conn.commit()
+        if name:
+            cursor.execute("INSERT INTO department (name) VALUES (?)", (name,))
+            conn.commit()
+        else:
+            print("存在空值，更新失败")
     except Exception as e:
         print("创建部门时出错：", e)
     finally:
         close_sqlite(conn, cursor)
 
-def load_all_ins_from_department():
-    conn, cursor = connect_db()
-    cursor.execute("SELECT * FROM department")
-    rows = cursor.fetchall()  # 获取所有的记录
-    close_sqlite(conn, cursor)
-    return rows
-
 def load_all_name_from_department():
     conn, cursor = connect_db()
-    cursor.execute("SELECT name FROM department")
+    cursor.execute("SELECT name FROM department WHERE name != '未知'")
     rows = cursor.fetchall()  # 获取所有的记录
     close_sqlite(conn, cursor)
     result = []
@@ -101,56 +97,112 @@ def load_all_manager_face_vector_from_people():
     return vectors
 
 def save_ins_to_history(job_id):
-    result = -1
+    """
+    将员工签到/签退记录保存到history表中
+    :param job_id: 员工工号
+    :return: 
+        1: 新插入一条签到记录，或当前时间与未签退记录的签到时间差小于10分钟
+        2: 当前时间与未签退记录的签到时间差在10-30分钟之间
+        3: 当前时间与未签退记录的签到时间差超过30分钟，更新为签退；或当前时间与最近签退时间差小于10分钟
+        4: 当前时间与最近签退时间差在10-30分钟之间
+    """
     # 获取当天日期字符串和当前时间字符串（精确到分钟）
     today_str = datetime.date.today().strftime("%Y-%m-%d")
     current_time_str = datetime.datetime.now().strftime("%H:%M")
     current_dt = datetime.datetime.strptime(f"{today_str} {current_time_str}", "%Y-%m-%d %H:%M")
+    
     # 连接数据库
     conn, cursor = connect_db()
-    # 查询当天且 job_id 相同的记录
-    cursor.execute("SELECT sign_in, sign_out FROM history WHERE date=? AND job_id=?", (today_str, job_id))
-    record = cursor.fetchone()
-    if record is None:
-        # 情况1：没有记录，插入一条新的记录
-        cursor.execute(
-            "INSERT INTO history (date, job_id, sign_in, sign_out) VALUES (?, ?, ?, ?)",
-            (today_str, job_id, current_time_str, "")
-        )
-        conn.commit()
-        result = 1
-    else:
-        sign_in_str, sign_out = record
-        # 如果已有记录且 sign_out 为空
-        if sign_out in (None, "", "NULL"):
-            # 将 sign_in 字符串与当天日期组合后解析为 datetime 对象
+    try:
+        # 查询当天该员工的所有记录
+        cursor.execute("""
+            SELECT id, sign_in, sign_out 
+            FROM history 
+            WHERE date=? AND job_id=?
+            ORDER BY 
+                CASE WHEN sign_out IS NULL OR sign_out = '' THEN 1 ELSE 0 END DESC,
+                sign_out DESC
+        """, (today_str, job_id))
+        
+        records = cursor.fetchall()
+        
+        # 情况1: 当天不存在记录
+        if not records:
+            # 插入一条sign_in为当前时间，sign_out为空的记录
+            cursor.execute(
+                "INSERT INTO history (date, job_id, sign_in, sign_out) VALUES (?, ?, ?, ?)",
+                (today_str, job_id, current_time_str, "")
+            )
+            conn.commit()
+            return 1
+        
+        # 检查是否有未签退的记录（sign_out为空）
+        for record_id, sign_in_str, sign_out in records:
+            if not sign_out or sign_out.strip() == "":  # 找到未签退记录
+                # 情况2: 存在记录且sign_in不为空而sign_out为空
+                try:
+                    # 解析签到时间
+                    sign_in_dt = datetime.datetime.strptime(f"{today_str} {sign_in_str}", "%Y-%m-%d %H:%M")
+                    
+                    # 计算当前时间与签到时间的差（分钟）
+                    time_diff = (current_dt - sign_in_dt).total_seconds() / 60.0
+                    
+                    if time_diff <= 10:
+                        # 时间差不超过10分钟
+                        return 1
+                    elif 10 < time_diff <= 30:
+                        # 时间差超过10分钟但不超过30分钟
+                        return 2
+                    else:
+                        # 时间差超过30分钟，更新sign_out为当前时间
+                        cursor.execute(
+                            "UPDATE history SET sign_out=? WHERE id=?",
+                            (current_time_str, record_id)
+                        )
+                        conn.commit()
+                        return 3
+                except Exception as e:
+                    print(f"解析时间出错: {e}")
+                    return -1
+        
+        # 情况3: 所有记录都已签退（sign_in和sign_out都不为空）
+        # 由于之前的ORDER BY，records[0]应该是sign_out最大的记录
+        if records:
+            record_id, sign_in_str, sign_out_str = records[0]
+            
             try:
-                sign_in_dt = datetime.datetime.strptime(f"{today_str} {sign_in_str}", "%Y-%m-%d %H:%M")
+                # 解析最近的签退时间
+                sign_out_dt = datetime.datetime.strptime(f"{today_str} {sign_out_str}", "%Y-%m-%d %H:%M")
+                
+                # 计算当前时间与最近签退时间的差（分钟）
+                time_diff = (current_dt - sign_out_dt).total_seconds() / 60.0
+                
+                if time_diff <= 10:
+                    # 时间差不超过10分钟
+                    return 3
+                elif 10 < time_diff <= 30:
+                    # 时间差超过10分钟但不超过30分钟
+                    return 4
+                else:
+                    # 时间差超过30分钟，插入新记录
+                    cursor.execute(
+                        "INSERT INTO history (date, job_id, sign_in, sign_out) VALUES (?, ?, ?, ?)",
+                        (today_str, job_id, current_time_str, "")
+                    )
+                    conn.commit()
+                    return 1
             except Exception as e:
-                result = -2
-                close_sqlite(conn, cursor)
-                return result
-            # 计算当前时间与 sign_in 之间的时间差（分钟）
-            time_diff = (current_dt - sign_in_dt).total_seconds() / 60.0
-            if time_diff > 30:
-                # 情况2：时间差超过 10 分钟，则更新 sign_out 为当前时间
-                cursor.execute(
-                    "UPDATE history SET sign_out=? WHERE date=? AND job_id=?",
-                    (current_time_str, today_str, job_id)
-                )
-                conn.commit()
-                result = 2
-            elif 10 < time_diff < 30:
-                # 情况：时间差不超过 30 分钟，但超过十分钟
-                result = 0
-            else:
-                result = 1
-        else:
-            # 情况3：已有记录且 sign_out 不为空，什么都不做
-            result = -1
-    # 关闭数据库连接
-    close_sqlite(conn, cursor)
-    return result
+                print(f"解析时间出错: {e}")
+                return -1
+        
+        # 理论上不会到达这里，但为了代码完整性添加
+        return -1
+    except Exception as e:
+        print(f"添加历史记录时出错：{e}")
+        return -1
+    finally:
+        # 关闭数据库连接
+        close_sqlite(conn, cursor)
 
 def load_attendance(date_str):
     """
@@ -366,21 +418,279 @@ def update_people(job_id, new_job_id, new_name, new_department_id, new_is_manage
     conn, cursor = connect_db()
     # 执行 UPDATE 语句
     try:
-        cursor.execute("""
-                UPDATE people
-                SET job_id = ?, name = ?, department_id = ?, is_manager = ?
-                WHERE job_id = ?
-            """, (new_job_id, new_name, new_department_id, new_is_manager, job_id))
-        conn.commit()
-        if cursor.rowcount > 0:
-            print("记录更新成功")
+        if new_job_id and new_name and new_department_id and new_is_manager:
+            cursor.execute("""
+                    UPDATE people
+                    SET job_id = ?, name = ?, department_id = ?, is_manager = ?
+                    WHERE job_id = ?
+                """, (new_job_id, new_name, new_department_id, new_is_manager, job_id))
+            conn.commit()
+            if cursor.rowcount > 0:
+                print("记录更新成功")
+            else:
+                print(f"未找到 job_id 为 {job_id} 的记录。")
         else:
-            print(f"未找到 job_id 为 {job_id} 的记录。")
+            print("存在空值，更新失败")
     except Exception as e:
         print("更新过程中出错：", e)
     finally:
         close_sqlite(conn, cursor)
 
+def update_department(old_name, new_name):
+    """
+    更新department表中的部门名称
+    :param old_name: 原部门名称
+    :param new_name: 新部门名称
+    :return: 更新是否成功（True/False）
+    """
+    conn, cursor = connect_db()
+    try:
+        if new_name:
+            # 更新部门名称
+            cursor.execute("""
+                UPDATE department
+                SET name = ?
+                WHERE name = ?
+            """, (new_name, old_name))
+            conn.commit()
+            if cursor.rowcount > 0:
+                print(f"部门名称从 '{old_name}' 更新为 '{new_name}' 成功")
+                return True
+            else:
+                print(f"未找到部门名称为 '{old_name}' 的记录")
+                return False
+        else:
+            print("存在空值，更新失败")
+    except Exception as e:
+        print(f"更新部门名称时出错：{e}")
+        return False
+    finally:
+        close_sqlite(conn, cursor)
+
+def delete_department(name):
+    """
+    删除department表中指定name的部门记录，同时将people表中关联该部门的员工的department_id修改为0
+    :param name: 要删除的部门名称
+    :return: 是否删除成功（True/False）
+    """
+    conn, cursor = connect_db()
+    try:
+        # 首先查询department表中要删除部门的id
+        cursor.execute("SELECT id FROM department WHERE name = ?", (name,))
+        result = cursor.fetchone()
+        if not result:
+            print(f"未找到部门名称为 '{name}' 的记录")
+            return False
+        department_id = result[0]
+        # 开始事务
+        conn.execute("BEGIN TRANSACTION")
+        # 更新people表中关联该部门的员工的department_id为0
+        cursor.execute("""
+            UPDATE people
+            SET department_id = 0
+            WHERE department_id = ?
+        """, (department_id,))
+        updated_employees_count = cursor.rowcount
+        # 删除department表中的记录
+        cursor.execute("DELETE FROM department WHERE id = ?", (department_id,))
+        # 提交事务
+        conn.commit()
+        print(f"部门 '{name}' 已成功删除，{updated_employees_count} 名员工被重新分配到默认部门")
+        return True
+    except Exception as e:
+        # 发生错误时回滚事务
+        conn.rollback()
+        print(f"删除部门时出错：{e}")
+        return False
+    finally:
+        close_sqlite(conn, cursor)
+
+def load_name_department_by_job_id_from_people(job_id):
+    """
+    根据工号获取员工姓名和部门名称
+    :param job_id: 员工工号
+    :return: 包含员工姓名和部门名称的元组(name, department_name)，如果未找到则返回(None, None)
+    """
+    conn, cursor = connect_db()
+    try:
+        # 联结查询people表和department表，获取员工姓名和部门名称
+        cursor.execute("""
+            SELECT p.name, d.name 
+            FROM people p
+            JOIN department d ON p.department_id = d.id
+            WHERE p.job_id = ?
+        """, (job_id,))
+        result = cursor.fetchone()
+        if result:
+            return result  # 返回(name, department_name)元组
+        else:
+            return None, None  # 如果未找到记录，返回None元组
+    except Exception as e:
+        print(f"查询员工信息时出错：{e}")
+        return None, None
+    finally:
+        close_sqlite(conn, cursor)
+
+def save_history(date_str, job_id, sign_in, sign_out):
+    """
+    在history表中插入一条新记录，根据时间段的关系决定是合并还是新增记录
+    :param date_str: 日期字符串，格式为"yyyy-MM-dd"
+    :param job_id: 工号
+    :param sign_in: 签到时间，格式为"HH:mm"
+    :param sign_out: 签退时间，格式为"HH:mm"，可以为空字符串
+    :return: 是否插入成功(True/False)，失败信息
+    """
+    # 参数验证
+    if not date_str or not job_id:
+        return False, "日期或工号不能为空"
+    
+    # 验证签到和签退时间的逻辑关系
+    if sign_in and sign_out:
+        # 比较签到和签退时间
+        try:
+            sign_in_time = datetime.datetime.strptime(sign_in, "%H:%M")
+            sign_out_time = datetime.datetime.strptime(sign_out, "%H:%M")
+            if sign_out_time <= sign_in_time:
+                return False, "签退时间必须晚于签到时间"
+        except ValueError:
+            return False, "时间格式错误"
+    
+    # 连接数据库
+    conn, cursor = connect_db()
+    try:
+        # 检查该job_id是否存在于people表中
+        cursor.execute("SELECT 1 FROM people WHERE job_id = ?", (job_id,))
+        if not cursor.fetchone():
+            return False, f"工号 {job_id} 不存在于员工表中"
+        
+        # 解析新记录的签到时间
+        try:
+            new_in_time = datetime.datetime.strptime(sign_in, "%H:%M")
+            new_out_time = datetime.datetime.strptime(sign_out, "%H:%M") if sign_out else None
+        except ValueError:
+            return False, "时间格式错误，无法处理"
+        
+        # 检查当天是否已有该工号的记录
+        cursor.execute("""
+            SELECT id, sign_in, sign_out 
+            FROM history 
+            WHERE date = ? AND job_id = ?
+        """, (date_str, job_id))
+        
+        existing_records = cursor.fetchall()
+        
+        # 如果没有现有记录，直接插入新记录
+        if not existing_records:
+            cursor.execute("""
+                INSERT INTO history (date, job_id, sign_in, sign_out)
+                VALUES (?, ?, ?, ?)
+            """, (date_str, job_id, sign_in, sign_out if sign_out else ""))
+            
+            conn.commit()
+            return True, "记录添加成功"
+
+        # 以下处理新记录有完整签到/签退时间的情况
+        # 识别所有与新记录有交集的记录
+        records_to_merge = []  # 需要合并的记录列表
+        
+        # 寻找与新记录有交集的所有记录
+        for record in existing_records:
+            record_id, existing_sign_in, existing_sign_out = record
+            
+            # 解析现有记录的时间
+            try:
+                existing_in_time = datetime.datetime.strptime(existing_sign_in, "%H:%M") if existing_sign_in else None
+                existing_out_time = datetime.datetime.strptime(existing_sign_out, "%H:%M") if existing_sign_out else None
+            except ValueError:
+                continue  # 跳过无法解析的记录
+            
+            # 如果现有记录没有签退时间（即尚未签退）
+            if existing_in_time and not existing_out_time:
+                # 如果新签退时间早于现有签到时间，表示完全分离
+                if new_out_time and new_out_time < existing_in_time:
+                    continue
+                
+                # 否则需要合并
+                records_to_merge.append((record_id, existing_in_time, existing_out_time))
+            
+            # 如果现有记录有完整的签到/签退时间
+            elif existing_in_time and existing_out_time and new_out_time:
+                # 检查两个时间段是否有交集
+                # 两个时间段有交集的条件: not (新签出 < 旧签入 or 新签入 > 旧签出)
+                if not (new_out_time < existing_in_time or new_in_time > existing_out_time):
+                    # 有交集，需要合并
+                    records_to_merge.append((record_id, existing_in_time, existing_out_time))
+            
+        # 如果没有找到需要合并的记录，插入新记录
+        if not records_to_merge:
+            cursor.execute("""
+                INSERT INTO history (date, job_id, sign_in, sign_out)
+                VALUES (?, ?, ?, ?)
+            """, (date_str, job_id, sign_in, sign_out))
+            
+            conn.commit()
+            return True, "新记录与现有记录无交集，已添加为独立记录"
+        
+        # 开始事务以确保操作的原子性
+        conn.execute("BEGIN TRANSACTION")
+        
+        try:
+            # 计算所有需要合并的记录的时间并集
+            # 初始化为新记录的时间
+            earliest_in_time = new_in_time
+            latest_out_time = new_out_time
+            
+            # 遍历所有需要合并的记录，找出最早的签到和最晚的签退
+            for _, existing_in_time, existing_out_time in records_to_merge:
+                if existing_in_time and existing_in_time < earliest_in_time:
+                    earliest_in_time = existing_in_time
+                
+                if existing_out_time:
+                    if not latest_out_time or existing_out_time > latest_out_time:
+                        latest_out_time = existing_out_time
+            
+            # 转回字符串格式
+            merged_sign_in = earliest_in_time.strftime("%H:%M")
+            merged_sign_out = latest_out_time.strftime("%H:%M") if latest_out_time else ""
+            
+            # 保留第一条记录，删除其他所有记录
+            first_record_id = records_to_merge[0][0]
+            other_record_ids = [record[0] for record in records_to_merge[1:]]
+            
+            # 更新第一条记录
+            cursor.execute("""
+                UPDATE history
+                SET sign_in = ?, sign_out = ?
+                WHERE id = ?
+            """, (merged_sign_in, merged_sign_out, first_record_id))
+            
+            # 删除其他记录
+            if other_record_ids:
+                placeholders = ','.join(['?'] * len(other_record_ids))
+                cursor.execute(f"""
+                    DELETE FROM history
+                    WHERE id IN ({placeholders})
+                """, other_record_ids)
+            
+            # 提交事务
+            conn.commit()
+            
+            if len(records_to_merge) > 1:
+                return True, f"已将新记录与{len(records_to_merge)}条现有记录合并"
+            else:
+                return True, "已将新记录合并到现有记录中"
+            
+        except Exception as e:
+            # 出错时回滚事务
+            conn.rollback()
+            print(f"合并记录时出错: {e}")
+            return False, f"合并记录时出错: {e}"
+        
+    except Exception as e:
+        print(f"添加历史记录时出错：{e}")
+        return False, f"数据库错误：{str(e)}"
+    finally:
+        close_sqlite(conn, cursor)
 
 if __name__ == "__main__":
     vec = load_all_face_vector_from_people()[0][1]

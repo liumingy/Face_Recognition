@@ -17,7 +17,6 @@ class ManagerLogin(QMainWindow, Ui_MainWindow):
         # 设置定时器来实时更新图像
         self.camera_timer = QTimer(self)
         self.camera_timer.timeout.connect(self.camera.update_image)
-        self.camera_timer.start(50)  # 每50毫秒更新一次
         # 将二维画面添加到groupBox里
         layout = QVBoxLayout()
         layout.addWidget(self.camera.canvas)
@@ -40,6 +39,7 @@ class ManagerLogin(QMainWindow, Ui_MainWindow):
                 self.flag = False
                 self.parent.parent.manager.pause()
                 self.hide()
+                self.parent.camera_timer.start(50)
                 self.parent.show()
             else:
                 self.label.setStyleSheet(f"color: red;")
@@ -48,4 +48,5 @@ class ManagerLogin(QMainWindow, Ui_MainWindow):
             self.label.setText("人脸验证中")
 
     def closeEvent(self, event):
+        self.camera_timer.stop()
         self.parent.goto_main()
