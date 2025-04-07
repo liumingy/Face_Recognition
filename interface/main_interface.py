@@ -50,4 +50,4 @@ class Ui_MainWindow(object):
     def retranslateUi(self, MainWindow):
         _translate = QtCore.QCoreApplication.translate
         MainWindow.setWindowTitle(_translate("MainWindow", "人脸识别考勤系统"))
-        self.commandLinkButton.setText(_translate("MainWindow", " 进入管理模式"))
+        self.commandLinkButton.setText(_translate("MainWindow", " 进入管理界面"))

@@ -541,8 +541,14 @@ def save_history(date_str, job_id, sign_in, sign_out):
     :return: 是否插入成功(True/False)，失败信息
     """
     # 参数验证
-    if not date_str or not job_id:
-        return False, "日期或工号不能为空"
+    if not date_str or not job_id or not sign_in or not sign_out:
+        return False, "填写的信息不能为空"
+    
+    # 验证日期格式
+    try:
+        datetime.datetime.strptime(date_str, "%Y-%m-%d")
+    except ValueError:
+        return False, "日期格式错误"
     
     # 验证签到和签退时间的逻辑关系
     if sign_in and sign_out:

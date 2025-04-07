@@ -65,12 +65,12 @@ def is_real_face(image, model_dir, device_id):
         # print("Image is Real Face. Score: {:.2f}.".format(value))
         # result_text = "RealFace Score: {:.2f}".format(value)
         # color = (255, 0, 0)
-        return True
+        return True, value
     else:
         # print("Image is Fake Face. Score: {:.2f}.".format(value))
         # result_text = "FakeFace Score: {:.2f}".format(value)
         # color = (0, 0, 255)
-        return False
+        return False, value
     # print("Prediction cost {:.2f} s".format(test_speed))
     # cv2.rectangle(
     #     image,

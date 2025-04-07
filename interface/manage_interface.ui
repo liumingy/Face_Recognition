@@ -475,7 +475,7 @@
      <widget class="QPushButton" name="pushButton_6">
       <property name="geometry">
        <rect>
-        <x>620</x>
+        <x>350</x>
         <y>80</y>
         <width>160</width>
         <height>40</height>
@@ -488,6 +488,42 @@
       </property>
       <property name="text">
        <string>添加记录</string>
+      </property>
+     </widget>
+     <widget class="QPushButton" name="pushButton_7">
+      <property name="geometry">
+       <rect>
+        <x>610</x>
+        <y>80</y>
+        <width>160</width>
+        <height>40</height>
+       </rect>
+      </property>
+      <property name="font">
+       <font>
+        <pointsize>10</pointsize>
+       </font>
+      </property>
+      <property name="text">
+       <string>导入记录</string>
+      </property>
+     </widget>
+     <widget class="QPushButton" name="pushButton_8">
+      <property name="geometry">
+       <rect>
+        <x>870</x>
+        <y>80</y>
+        <width>160</width>
+        <height>40</height>
+       </rect>
+      </property>
+      <property name="font">
+       <font>
+        <pointsize>10</pointsize>
+       </font>
+      </property>
+      <property name="text">
+       <string>导出记录</string>
       </property>
      </widget>
     </widget>
@@ -711,7 +747,10 @@
      <normaloff>people.png</normaloff>people.png</iconset>
    </property>
    <property name="text">
-    <string>人员管理</string>
+    <string>员工管理</string>
+   </property>
+   <property name="toolTip">
+    <string>员工管理</string>
    </property>
   </action>
  </widget>

@@ -172,7 +172,8 @@ class Compare(QObject, threading.Thread):
                 left_eye = (points[0][0], points[5][0])
                 right_eye = (points[1][0], points[6][0])
                 aligned, resized= align_face(image, left_eye, right_eye, bounding_box, margin, image_size)
-                if not is_real_face(resized, "./model/anti_spoof_models", 0):
+                real, real_value = is_real_face(resized, "./model/anti_spoof_models", 0)
+                if not real:
                     self.recognition_fake_face_signal.emit(True)
                     continue
                 emb = np.array(model.detect_image(Image.fromarray(aligned)), dtype=np.float32)  # 计算向量
@@ -190,7 +191,8 @@ class Compare(QObject, threading.Thread):
                 left_eye = (points[0][0], points[5][0])
                 right_eye = (points[1][0], points[6][0])
                 aligned, resized = align_face(image, left_eye, right_eye, bounding_box, margin, image_size)
-                if not is_real_face(resized, "./model/anti_spoof_models", 0):
+                real, real_value = is_real_face(resized, "./model/anti_spoof_models", 0)
+                if not real:
                     continue
                 emb = np.array(model.detect_image(Image.fromarray(aligned)), dtype=np.float32)  # 计算向量
                 queue_register_result.put(emb[0])
@@ -207,7 +209,8 @@ class Compare(QObject, threading.Thread):
                 left_eye = (points[0][0], points[5][0])
                 right_eye = (points[1][0], points[6][0])
                 aligned, resized = align_face(image, left_eye, right_eye, bounding_box, margin, image_size)
-                if not is_real_face(resized, "./model/anti_spoof_models", 0):
+                real, real_value = is_real_face(resized, "./model/anti_spoof_models", 0)
+                if not real:
                     self.manager_fake_face_signal.emit(True)
                     continue
                 emb = np.array(model.detect_image(Image.fromarray(aligned)), dtype=np.float32)  # 计算向量
@@ -269,17 +272,48 @@ class Manager(QObject, threading.Thread):
         self.flag.set()  # 将线程从暂停状态恢复, 如果已经暂停的话
         self.running.clear()
 
+class RegisterThread(QObject, threading.Thread):
+    # 定义信号，用于通知注册结果
+    register_completed = pyqtSignal(bool)
+    
+    def __init__(self, job_id, name, department_id, is_manager):
+        super().__init__()
+        self.job_id = job_id
+        self.name = name
+        self.department_id = department_id
+        self.is_manager = is_manager
+        self.daemon = True  # 设置为守护线程，随主线程退出
+        
+    def run(self):
+        result = False
+        if self.job_id and self.name and self.department_id:
+            queue_register_image.put(grab_frame(capture))
+            try:
+                vector = queue_register_result.get(timeout=5)
+                save_ins_to_people(self.job_id, self.name, self.department_id, vector, self.is_manager)
+                result = True
+            except Exception:
+                result = False
+        
+        # 发送注册完成信号，携带注册结果
+        self.register_completed.emit(result)
+
 def register(job_id, name, department_id=0, is_manager=0):
-    if job_id and name and department_id:
-        queue_register_image.put(grab_frame(capture))
-        try:
-            vector = queue_register_result.get(timeout=5)
-            save_ins_to_people(job_id, name, department_id, vector, is_manager)
-            return True
-        except Exception:
-            return False
-    else:
-        return False
+    """
+    创建并返回一个RegisterThread实例，用于异步注册操作
+    
+    参数:
+        job_id: 工号
+        name: 姓名
+        department_id: 部门ID
+        is_manager: 是否为管理员
+        
+    返回:
+        RegisterThread实例，调用者需要连接register_completed信号并启动线程
+    """
+    # 创建注册线程实例
+    register_thread = RegisterThread(job_id, name, department_id, is_manager)
+    return register_thread
 
 def align_face(image, left_eye, right_eye, bounding_box, margin=40, desired_size=160, resize_width=180):
     """
