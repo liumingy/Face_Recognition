@@ -72,17 +72,13 @@ def is_real_face(image, model_dir, device_id):
         # color = (0, 0, 255)
         return False, value
     # print("Prediction cost {:.2f} s".format(test_speed))
+    #
+    # cv2.imwrite("test.jpg", image)
     # cv2.rectangle(
     #     image,
     #     (image_bbox[0], image_bbox[1]),
     #     (image_bbox[0] + image_bbox[2], image_bbox[1] + image_bbox[3]),
     #     color, 2)
-    # cv2.putText(
-    #     image,
-    #     result_text,
-    #     (image_bbox[0], image_bbox[1] - 5),
-    #     cv2.FONT_HERSHEY_COMPLEX, 0.5*image.shape[0]/1024, color)
-    #
     # cv2.imwrite("test_result.jpg", image)
 
 

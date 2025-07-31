@@ -83,6 +83,7 @@ class Manage(QMainWindow, Ui_MainWindow):
         self.show_attendance()
         self.lineEdit_3.addAction(action, QLineEdit.LeadingPosition)  # 左侧图标
         self.lineEdit_3.returnPressed.connect(self.on_search_attendance)
+        self.pushButton_9.clicked.connect(self.on_export_attendance)
 
         # 第二页界面的初始化
         # 创建摄像头流对象
@@ -121,6 +122,101 @@ class Manage(QMainWindow, Ui_MainWindow):
 
         # 初始化页面
         self.stackedWidget.setCurrentIndex(0)
+
+    def on_export_attendance(self):
+        # 弹出文件夹选择对话框
+        folder_path = QFileDialog.getExistingDirectory(self, "选择保存文件夹", "")
+        
+        if not folder_path:  # 用户取消了选择
+            return
+            
+        try:
+            if not self.attendance_data:
+                self.msg_box.setText("没有可导出的考勤数据")
+                self.msg_box.exec_()
+                return
+                
+            # 创建进度对话框
+            progress_dialog = QDialog(self)
+            progress_dialog.setWindowTitle("导出进度")
+            progress_dialog.setFixedSize(400, 100)
+            progress_dialog.setWindowFlags(Qt.Dialog | Qt.CustomizeWindowHint | Qt.WindowTitleHint)
+            progress_dialog.setModal(True)
+            
+            # 创建布局
+            layout = QVBoxLayout(progress_dialog)
+            
+            # 添加文本标签
+            text_label = QLabel("正在导出考勤数据...", progress_dialog)
+            text_label.setAlignment(Qt.AlignCenter)
+            layout.addWidget(text_label)
+            
+            # 添加进度条
+            progress_bar = QProgressBar(progress_dialog)
+            progress_bar.setRange(0, 100)
+            progress_bar.setValue(0)
+            progress_bar.setTextVisible(True)
+            layout.addWidget(progress_bar)
+            
+            # 显示对话框
+            progress_dialog.show()
+            QApplication.processEvents()
+            
+            # 更新进度条到25%，表示开始处理数据
+            progress_bar.setValue(25)
+            QApplication.processEvents()
+            
+            # 将记录转换为DataFrame
+            df = pd.DataFrame(self.attendance_data)
+            
+            # 设置列顺序
+            df = df[["job_id", "name", "department", "day_duration", "attendance_day", "month_duration"]]
+            
+            # 重命名列为中文
+            df.columns = ["工号", "姓名", "部门", "日工时", "工作天数", "月工时"]
+            
+            # 更新进度条到50%，表示数据处理完成
+            progress_bar.setValue(50)
+            QApplication.processEvents()
+            
+            # 获取当前日期作为文件名的一部分
+            current_date = self.calendarWidget.selectedDate().toString("yyyy-MM-dd")
+            
+            # 构建保存路径
+            file_path = os.path.join(folder_path, f"考勤统计_{current_date}.xlsx")
+            
+            # 检查文件是否存在，如果存在则为文件名添加(1)、(2)等后缀
+            counter = 1
+            base_name = f"考勤统计_{current_date}"
+            while os.path.exists(file_path):
+                file_path = os.path.join(folder_path, f"{base_name}({counter}).xlsx")
+                counter += 1
+            
+            # 更新进度条到75%，表示准备写入文件
+            progress_bar.setValue(75)
+            QApplication.processEvents()
+            
+            # 将数据写入Excel文件
+            df.to_excel(file_path, index=False)
+            
+            # 完成导出，更新进度条到100%
+            progress_bar.setValue(100)
+            QApplication.processEvents()
+            
+            # 关闭进度对话框
+            progress_dialog.close()
+            
+            # 显示导出成功消息
+            self.msg_box.setText(f"导出成功!\n文件保存在：{file_path}")
+            self.msg_box.exec_()
+            
+        except Exception as e:
+            # 关闭进度对话框（如果已打开）
+            if 'progress_dialog' in locals() and progress_dialog.isVisible():
+                progress_dialog.close()
+                
+            self.msg_box.setText(f"导出失败: {str(e)}")
+            self.msg_box.exec_()
 
     def on_import_history(self):
         # 弹出文件选择对话框
@@ -446,14 +542,64 @@ class Manage(QMainWindow, Ui_MainWindow):
         self.comboBox_2.addItems(self.departments)
 
     def show_attendance(self):
+        # 创建进度对话框
+        progress_dialog = QDialog(self)
+        progress_dialog.setWindowTitle("加载考勤数据")
+        progress_dialog.setFixedSize(400, 100)
+        progress_dialog.setWindowFlags(Qt.Dialog | Qt.CustomizeWindowHint | Qt.WindowTitleHint)
+        progress_dialog.setModal(True)
+        
+        # 创建布局
+        layout = QVBoxLayout(progress_dialog)
+        
+        # 添加文本标签
+        text_label = QLabel("正在加载考勤数据...", progress_dialog)
+        text_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(text_label)
+        
+        # 添加进度条
+        progress_bar = QProgressBar(progress_dialog)
+        progress_bar.setRange(0, 100)
+        progress_bar.setValue(0)
+        progress_bar.setTextVisible(True)
+        layout.addWidget(progress_bar)
+        
+        # 显示对话框
+        progress_dialog.show()
+        QApplication.processEvents()
+        
+        # 更新进度条为30%，表示开始加载数据
+        progress_bar.setValue(30)
+        QApplication.processEvents()
+        
+        # 加载考勤数据
+        self.attendance_data.clear()
         self.attendance_data = load_attendance(self.calendarWidget.selectedDate().toString("yyyy-MM-dd"))
+        
+        # 更新进度条为70%，表示数据已加载完成，开始填充表格
+        progress_bar.setValue(70)
+        QApplication.processEvents()
+        
+        # 填充表格
         keys = ["job_id", "name", "department", "day_duration", "attendance_day", "month_duration"]
+        self.tableWidget.setSortingEnabled(False)
+        self.tableWidget.clearContents()
         self.tableWidget.setRowCount(len(self.attendance_data))
         for row, record in enumerate(self.attendance_data):
             for col, key in enumerate(keys):
                 # 将字典中的值转换为字符串后放入单元格
                 item = QTableWidgetItem(str(record[key]))
                 self.tableWidget.setItem(row, col, item)
+        self.tableWidget.setSortingEnabled(True)
+        
+        # 更新进度条为100%，表示所有操作已完成
+        progress_bar.setValue(100)
+        QApplication.processEvents()
+        
+        # 关闭进度对话框
+        progress_dialog.close()
+        
+        # 调整表格大小并显示
         self.tableWidget.resizeRowsToContents()
         self.tableWidget.resizeColumnsToContents()
         self.stackedWidget.setCurrentIndex(2)
@@ -462,12 +608,15 @@ class Manage(QMainWindow, Ui_MainWindow):
     def show_history(self):
         self.sign_history = load_sign_history()
         keys = ["date", "job_id", "name", "department", "sign_in", "sign_out"]
+        self.tableWidget_2.setSortingEnabled(False)
+        self.tableWidget_2.clearContents()
         self.tableWidget_2.setRowCount(len(self.sign_history))
         for row, record in enumerate(self.sign_history):
             for col, key in enumerate(keys):
                 # 将字典中的值转换为字符串后放入单元格
                 item = QTableWidgetItem(str(record[key]))
                 self.tableWidget_2.setItem(row, col, item)
+        self.tableWidget_2.setSortingEnabled(True)
         self.tableWidget_2.resizeRowsToContents()
         self.tableWidget_2.resizeColumnsToContents()
         self.stackedWidget.setCurrentIndex(3)
@@ -476,12 +625,15 @@ class Manage(QMainWindow, Ui_MainWindow):
     def show_people(self):
         self.people_info = load_people()
         keys = ["job_id", "name", "department", "is_manager"]
+        self.tableWidget_3.setSortingEnabled(False)
+        self.tableWidget_3.clearContents()
         self.tableWidget_3.setRowCount(len(self.people_info))
         for row, record in enumerate(self.people_info):
             for col, key in enumerate(keys):
                 # 将字典中的值转换为字符串后放入单元格
                 item = QTableWidgetItem(str(record[key]))
                 self.tableWidget_3.setItem(row, col, item)
+        self.tableWidget_3.setSortingEnabled(True)
         self.tableWidget_3.resizeRowsToContents()
         self.tableWidget_3.resizeColumnsToContents()
         self.stackedWidget.setCurrentIndex(2)

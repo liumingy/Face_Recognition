@@ -62,7 +62,7 @@
        </font>
       </property>
       <property name="text">
-       <string> 返回打卡模式</string>
+       <string> 返回打卡界面</string>
       </property>
       <property name="icon">
        <iconset>
@@ -205,6 +205,24 @@
       </property>
       <property name="placeholderText">
        <string>搜索</string>
+      </property>
+     </widget>
+     <widget class="QPushButton" name="pushButton_9">
+      <property name="geometry">
+       <rect>
+        <x>20</x>
+        <y>340</y>
+        <width>160</width>
+        <height>40</height>
+       </rect>
+      </property>
+      <property name="font">
+       <font>
+        <pointsize>10</pointsize>
+       </font>
+      </property>
+      <property name="text">
+       <string>导出数据</string>
       </property>
      </widget>
     </widget>
@@ -583,7 +601,7 @@
       </column>
       <column>
        <property name="text">
-        <string>类型</string>
+        <string>身份</string>
        </property>
       </column>
      </widget>
@@ -729,7 +747,10 @@
      <normaloff>list.png</normaloff>list.png</iconset>
    </property>
    <property name="text">
-    <string>出勤统计</string>
+    <string>考勤统计</string>
+   </property>
+   <property name="toolTip">
+    <string>考勤统计</string>
    </property>
   </action>
   <action name="actionHistory">
@@ -738,7 +759,10 @@
      <normaloff>history.png</normaloff>history.png</iconset>
    </property>
    <property name="text">
-    <string>打卡记录</string>
+    <string>出勤记录</string>
+   </property>
+   <property name="toolTip">
+    <string>出勤记录</string>
    </property>
   </action>
   <action name="actionPeople">

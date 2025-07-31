@@ -56,9 +56,10 @@ class Main(QMainWindow, Ui_MainWindow):
 
     def sign(self, result):
         min_value_row = min(enumerate(result), key=lambda x: x[1][1])  # 第二列索引是1
+        print(min_value_row)
         print(f"人脸打卡：{min_value_row}")
         if min_value_row[1][1] <= 1:
-            info = load_name_by_job_id_from_people(min_value_row[1][0])
+            info = str(min_value_row[1][0]) + load_name_by_job_id_from_people(min_value_row[1][0]) + " "
             type = save_ins_to_history(min_value_row[1][0])
             if type == 1:
                 self.label.setStyleSheet(f"color: blue;")

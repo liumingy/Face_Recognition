@@ -206,99 +206,104 @@ def save_ins_to_history(job_id):
 
 def load_attendance(date_str):
     """
-    date_str: 日期字符串，格式 "YYYY-MM-DD"
-        返回：列表，每个元素为字典，包含 "job_id", "name", "department", "day_duration","attendance_day", "month_duration"
-    """
-    # 连接数据库
-    conn, cursor = connect_db()
-
-    # 获取所有员工及部门名称
-    cursor.execute("""
-        SELECT p.job_id, p.name, d.name
-        FROM people p
-        JOIN department d ON p.department_id = d.id
-    """)
-    employees = cursor.fetchall()  # [(job_id, name, department), ...]
-
-    # 构造字典，key 为 job_id，值为员工信息字典
-    emp_dict = {}
-    for job_id, name, dept in employees:
-        emp_dict[job_id] = {
-            "job_id": job_id,
-            "name": name,
-            "department": dept,
-            "day_duration": 0.0,     # 当日工作时长（小时）
-            "attendance_day": 0,     # 当月出勤天数
-            "month_duration": 0.0    # 当月工作时长（小时）
+    根据指定日期统计所有员工的出勤情况
+    
+    参数:
+        date_str: 日期字符串，格式为"YYYY-MM-dd"
+        
+    返回:
+        包含所有员工出勤统计信息的列表，每个元素是一个字典，格式为：
+        {
+            "job_id": 工号,
+            "name": 姓名,
+            "department": 部门,
+            "day_duration": 当日工作时长(小时),
+            "attendance_day": 当月出勤天数,
+            "month_duration": 当月工作时长(小时)
         }
-
-    # 定义日期格式
-    dt_format = "%Y-%m-%d %H:%M"
-    # 当前日期对象（当天）对应的 datetime 对象，用于计算时差
-    # 注意：此处仅用于解析当天签到/签退时间时拼接 date_str 与时间字符串
-    # 查询当天记录：只计算 sign_out 非空的记录
-    cursor.execute("""
-        SELECT job_id, sign_in, sign_out
-        FROM history
-        WHERE date = ? AND sign_out IS NOT NULL AND sign_out <> ''
-    """, (date_str,))
-    daily_records = cursor.fetchall()  # [(job_id, sign_in, sign_out), ...]
-
-    # 计算当天每个员工的工作时长（单位：小时，保留一位小数）
-    for rec in daily_records:
-        job_id, sign_in, sign_out = rec
-        try:
-            dt_sign_in = datetime.datetime.strptime(date_str + " " + sign_in, dt_format)
-            dt_sign_out = datetime.datetime.strptime(date_str + " " + sign_out, dt_format)
-            duration = (dt_sign_out - dt_sign_in).total_seconds() / 3600.0
-            duration = round(duration, 1)
-        except Exception as e:
-            print("时间解析错误:", e)
-            duration = 0.0
-
-        # 记录当天的工作时长（假设每天只有一条记录）
-        if job_id in emp_dict:
-            emp_dict[job_id]["day_duration"] = duration
-
-    # 计算当月出勤天数和月工作时长
-    # 根据给定日期的前 7 个字符获取 "YYYY-MM"
-    month_prefix = date_str[:7]  # 如 "2023-03"
-    # 查询当月所有记录
-    cursor.execute("""
-        SELECT date, job_id, sign_in, sign_out
-        FROM history
-        WHERE date LIKE ? AND sign_out IS NOT NULL AND sign_out <> ''
-    """, (month_prefix + "-%",))
-    monthly_records = cursor.fetchall()  # [(date, job_id, sign_in, sign_out), ...]
-
-    # 使用字典聚合每个员工的当月出勤天数和工作时长
-    monthly_agg = {}
-    for rec in monthly_records:
-        record_date, job_id, sign_in, sign_out = rec
-        try:
-            dt_sign_in = datetime.datetime.strptime(record_date + " " + sign_in, dt_format)
-            dt_sign_out = datetime.datetime.strptime(record_date + " " + sign_out, dt_format)
-            duration = (dt_sign_out - dt_sign_in).total_seconds() / 3600.0
-            duration = round(duration, 1)
-        except Exception as e:
-            print("解析时间错误:", e)
-            duration = 0.0
-
-        if job_id not in monthly_agg:
-            monthly_agg[job_id] = {"attendance_day": 0, "month_duration": 0.0}
-        monthly_agg[job_id]["attendance_day"] += 1
-        monthly_agg[job_id]["month_duration"] += duration
-
-    # 将聚合的月数据合并到员工字典中（并保留一位小数）
-    for job_id, agg in monthly_agg.items():
-        if job_id in emp_dict:
-            emp_dict[job_id]["attendance_day"] = agg["attendance_day"]
-            emp_dict[job_id]["month_duration"] = round(agg["month_duration"], 1)
-
-    # 转换为列表
-    result = list(emp_dict.values())
-    close_sqlite(conn, cursor)
-    return result
+    """
+    conn, cursor = connect_db()
+    try:
+        # 解析日期字符串
+        target_date = datetime.datetime.strptime(date_str, "%Y-%m-%d")
+        year_month = target_date.strftime("%Y-%m")
+        
+        # 查询所有员工信息
+        cursor.execute("""
+            SELECT p.job_id, p.name, d.name AS department
+            FROM people p
+            JOIN department d ON p.department_id = d.id
+        """)
+        employees = cursor.fetchall()
+        
+        result = []
+        for employee in employees:
+            job_id, name, department = employee
+            
+            # 查询指定日期的出勤记录
+            cursor.execute("""
+                SELECT sign_in, sign_out
+                FROM history
+                WHERE date = ? AND job_id = ?
+                ORDER BY sign_in
+            """, (date_str, job_id))
+            daily_records = cursor.fetchall()
+            
+            # 计算当日工作时长（分钟）
+            daily_minutes = 0
+            for record in daily_records:
+                sign_in, sign_out = record
+                if sign_in and sign_out:
+                    in_time = datetime.datetime.strptime(sign_in, "%H:%M")
+                    out_time = datetime.datetime.strptime(sign_out, "%H:%M")
+                    daily_minutes += (out_time - in_time).total_seconds() / 60
+            
+            # 查询当月所有出勤记录
+            cursor.execute("""
+                SELECT DISTINCT date, sign_in, sign_out
+                FROM history
+                WHERE date LIKE ? AND job_id = ?
+                ORDER BY date
+            """, (f"{year_month}%", job_id))
+            monthly_records = cursor.fetchall()
+            
+            # 计算当月出勤天数和总工作时长
+            monthly_days = 0
+            monthly_minutes = 0
+            current_date = None
+            
+            for record in monthly_records:
+                date, sign_in, sign_out = record
+                # 只有当sign_in和sign_out都不为空时才计入出勤天数
+                if sign_in and sign_out:
+                    if date != current_date:
+                        monthly_days += 1
+                        current_date = date
+                    
+                    in_time = datetime.datetime.strptime(sign_in, "%H:%M")
+                    out_time = datetime.datetime.strptime(sign_out, "%H:%M")
+                    monthly_minutes += (out_time - in_time).total_seconds() / 60
+            
+            # 将分钟转换为小时（四舍五入到整数）
+            daily_hours = round(daily_minutes / 60)
+            monthly_hours = round(monthly_minutes / 60)
+            
+            result.append({
+                "job_id": job_id,
+                "name": name,
+                "department": department,
+                "day_duration": daily_hours,
+                "attendance_day": monthly_days,
+                "month_duration": monthly_hours
+            })
+        
+        return result
+        
+    except Exception as e:
+        print(f"统计出勤情况时出错：{e}")
+        return []
+    finally:
+        close_sqlite(conn, cursor)
 
 def load_sign_history():
     """

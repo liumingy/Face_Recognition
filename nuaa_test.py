@@ -1,11 +1,8 @@
 import time
 import numpy as np
 import matplotlib.pyplot as plt
-
 import cv2
 import tensorflow as tf
-from torch.utils.hipify.hipify_python import value
-
 from align import detect_face
 from camera import align_face
 from real_face import is_real_face
@@ -187,8 +184,8 @@ def plot_roc_curve(client_scores, imposter_scores, fn_count, tn_count):
         auc += (fprs[i] - fprs[i-1]) * (tprs[i] + tprs[i-1]) / 2
     
     plt.figure(figsize=(10, 10))
-    # plt.plot(fprs, tprs, label=f'ROC curve (AUC = {auc:.4f})')
-    plt.plot(tprs, fprs, label=f'ROC curve (AUC = {auc:.4f})')
+    plt.plot(fprs, tprs, label=f'ROC curve (AUC = {auc:.4f})')
+    # plt.plot(tprs, fprs, label=f'ROC curve (AUC = {auc:.4f})')
     plt.plot([0, 1], [0, 1], 'k--')
     plt.xlabel('False Positive Rate')
     plt.ylabel('True Positive Rate')
@@ -231,7 +228,7 @@ if __name__ == "__main__":
     for image_path in client_path:
         if total_client % 100 == 0:
             print(f"处理真实人脸{total_client}")
-        image = cv2.cvtColor(cv2.imread(image_path), cv2.COLOR_BGR2RGB)
+        image = cv2.imread(image_path)
         bounding_box, points = detect_face.detect_face(image, minsize, pnet, rnet, onet, threshold, factor)
         if len(bounding_box) < 1:
             continue
@@ -252,7 +249,7 @@ if __name__ == "__main__":
     for image_path in imposter_path:
         if total_imposter % 100 == 0:
             print(f"处理虚假人脸{total_imposter}")
-        image = cv2.cvtColor(cv2.imread(image_path), cv2.COLOR_BGR2RGB)
+        image = cv2.imread(image_path)
         bounding_box, points = detect_face.detect_face(image, minsize, pnet, rnet, onet, threshold, factor)
         if len(bounding_box) < 1:
             continue
@@ -276,25 +273,25 @@ if __name__ == "__main__":
     print(f"总冒充者人脸样本数: {total_imposter}")
     print(f"被判定为真实人脸的冒充者人脸样本数（FP）: {len(imposter_scores)}")
     print(f"被直接判定为虚假人脸的冒充者人脸样本数 (TN): {tn_count}")
-    
+
     # 绘制ROC曲线并获取AUC值
     auc = plot_roc_curve(client_scores, imposter_scores, fn_count, tn_count)
-    
+
     # 寻找最优阈值
     optimal_threshold, optimal_tpr = find_optimal_threshold(client_scores, imposter_scores, fn_count, tn_count)
     print(f"\n最优阈值: {optimal_threshold:.4f}")
     print(f"对应的TPR: {optimal_tpr:.4f}")
     print(f"AUC值: {auc:.4f}")
-    
+
     # 使用最优阈值计算最终的评估指标
     tpr, fpr = calculate_metrics(client_scores, imposter_scores, optimal_threshold, fn_count, tn_count)
-    
+
     # 计算各类样本数量
     tp = sum(1 for score in client_scores if score > optimal_threshold)
     fn = sum(1 for score in client_scores if score <= optimal_threshold) + fn_count
     fp = sum(1 for score in imposter_scores if score > optimal_threshold)
     tn = sum(1 for score in imposter_scores if score <= optimal_threshold) + tn_count
-    
+
     print(f"\n使用最优阈值的结果:")
     print(f"TP: {tp}, FP: {fp}, TN: {tn}, FN: {fn}")
     print(f"TPR: {tpr:.6f}")
